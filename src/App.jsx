@@ -106,7 +106,7 @@ export default function App() {
       </div>
       <div style={styles.content}>
         {tab === "Dashboard" && <Dashboard orders={orders} customers={customers} leads={leads} />}
-        {tab === "Pelates" && <Customers customers={customers} refresh={fetchAll} />}
+        {tab === "Pelates" && <Customers customers={customers} orders={orders} refresh={fetchAll} />}
         {tab === "Paraggellies" && <Orders orders={orders} customers={customers} refresh={fetchAll} />}
         {tab === "Leads" && <LeadsTab leads={leads} refresh={fetchAll} />}
         {tab === "Timologia" && <Invoices customers={customers} />}
@@ -151,129 +151,70 @@ function Card({ label, value, color }) {
   );
 }
 
-function Calculator() {
-  const [mode, setMode] = useState("shirts");
-  const [qty, setQty] = useState(100);
-  const [printSize, setPrintSize] = useState("A4");
-  const [shirtType, setShirtType] = useState("color");
-  const [isBig, setIsBig] = useState(false);
-  const [stickerM2, setStickerM2] = useState(1);
-  const [withInstall, setWithInstall] = useState(false);
+function CustomerProfile({ customer, orders, onBack }) {
+  const [invoices, setInvoices] = useState([]);
 
-  const shirtCost = SHIRT_PRICES[shirtType][isBig ? "big" : "normal"];
-  const dtfCost = (SIZES_M2[printSize] * DTF_PRICE_PER_M2);
-  const costPerShirt = shirtCost + dtfCost;
-  const totalCost = costPerShirt * qty;
-  const salePrice = getSalePrice(qty);
-  const totalSale = salePrice * qty;
-  const profit = totalSale - totalCost;
-  const margin = ((profit / totalSale) * 100).toFixed(1);
+  useEffect(() => {
+    supabase.from("invoices").select("*").eq("customer_id", customer.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setInvoices(data || []));
+  }, [customer.id]);
 
-  const stickerPrice = stickerM2 <= 1 ? 45 : stickerM2 * 17.5;
-  const installPrice = withInstall ? stickerM2 * 20 : 0;
-  const stickerTotal = stickerPrice + installPrice;
+  const customerOrders = orders.filter(o => o.customer_id === customer.id);
+  const totalSales = customerOrders.reduce((s, o) => s + (o.total || 0), 0);
+  const totalInvoices = invoices.reduce((s, i) => s + (i.total || 0), 0);
 
   return (
     <div>
-      <h2 style={styles.title}>🧮 Calculator</h2>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button onClick={() => setMode("shirts")} style={{ ...styles.btn, ...(mode !== "shirts" ? { background: "#e2e8f0", color: "#1e293b" } : {}) }}>👕 Faneles</button>
-        <button onClick={() => setMode("stickers")} style={{ ...styles.btn, ...(mode !== "stickers" ? { background: "#e2e8f0", color: "#1e293b" } : {}) }}>🏷️ Autokollita</button>
+      <button onClick={onBack} style={{ ...styles.btnSmall, marginBottom: 16 }}>← Back</button>
+      
+      <div style={{ background: "white", borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{customer.name}</div>
+        <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>{customer.phone} {customer.email && `· ${customer.email}`}</div>
+        {customer.notes && <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>{customer.notes}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={() => window.open(`https://wa.me/${customer.phone?.replace(/\D/g, '')}`, '_blank')} style={styles.btnWhatsapp}>💬 WhatsApp</button>
+          {customer.email && <button onClick={() => window.open(`mailto:${customer.email}`, '_blank')} style={styles.btnEmail}>✉️ Email</button>}
+        </div>
       </div>
 
-      {mode === "shirts" && (
-        <div style={styles.form}>
-          <label style={styles.label}>Xroma fanelas:</label>
-          <select style={styles.input} value={shirtType} onChange={e => setShirtType(e.target.value)}>
-            <option value="white">White / Ash (€2.06)</option>
-            <option value="color">Color (€2.42)</option>
-          </select>
-          <label style={styles.label}>Megethos:</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <button onClick={() => setIsBig(false)} style={{ ...styles.btnSmall, ...(!isBig ? { background: "#1e293b", color: "white" } : {}) }}>Normal (XS-XL)</button>
-            <button onClick={() => setIsBig(true)} style={{ ...styles.btnSmall, ...(isBig ? { background: "#1e293b", color: "white" } : {}) }}>BIG (2XL-5XL)</button>
-          </div>
-          <label style={styles.label}>Megethos DTF:</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            {Object.keys(SIZES_M2).map(s => (
-              <button key={s} onClick={() => setPrintSize(s)} style={{ ...styles.btnSmall, ...(printSize === s ? { background: "#1e293b", color: "white" } : {}) }}>{s}</button>
-            ))}
-          </div>
-          <label style={styles.label}>Posotita:</label>
-          <input style={styles.input} type="number" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
-          <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 16 }}>
-            <div style={styles.calcRow}><span>Kostos fanelas:</span><span>€{shirtCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos DTF ({printSize}):</span><span>€{dtfCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos/tem:</span><span style={{ fontWeight: 700 }}>€{costPerShirt.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Synoliko kostos:</span><span>€{totalCost.toFixed(2)}</span></div>
-            <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "8px 0" }} />
-            <div style={styles.calcRow}><span>Timi polisis/tem:</span><span style={{ color: "#3b82f6", fontWeight: 700 }}>€{salePrice.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Synolo polisis:</span><span style={{ color: "#3b82f6", fontWeight: 700 }}>€{totalSale.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kerdos:</span><span style={{ color: "#22c55e", fontWeight: 700 }}>€{profit.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Perithorio:</span><span style={{ color: "#22c55e", fontWeight: 700 }}>{margin}%</span></div>
-          </div>
-          <div style={{ marginTop: 12, padding: 10, background: "#fef9c3", borderRadius: 8, fontSize: 13 }}>
-            💡 {qty >= 100 ? "100+ tem → €6/tem" : qty >= 30 ? "30-99 tem → €7/tem" : qty >= 20 ? "20-29 tem → €8/tem" : "1-19 tem → €10/tem"}
-          </div>
-        </div>
-      )}
+      <div style={styles.cards}>
+        <Card label="Synolo Paraggellion" value={`€${totalSales.toFixed(2)}`} color="#3b82f6" />
+        <Card label="Synolo Timologion" value={`€${totalInvoices.toFixed(2)}`} color="#22c55e" />
+      </div>
 
-      {mode === "stickers" && (
-        <div style={styles.form}>
-          <label style={styles.label}>Tetragwnika metra:</label>
-          <input style={styles.input} type="number" step="0.1" value={stickerM2} onChange={e => setStickerM2(parseFloat(e.target.value) || 0)} />
-          <label style={styles.label}>Topothesia:</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <button onClick={() => setWithInstall(false)} style={{ ...styles.btnSmall, ...(!withInstall ? { background: "#1e293b", color: "white" } : {}) }}>Xoris</button>
-            <button onClick={() => setWithInstall(true)} style={{ ...styles.btnSmall, ...(withInstall ? { background: "#1e293b", color: "white" } : {}) }}>Me topothesia (+€20/m²)</button>
+      <h3 style={styles.subtitle}>📦 Paraggellies ({customerOrders.length})</h3>
+      {customerOrders.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>Kamia paraggelia akoma</div>}
+      {customerOrders.map(o => (
+        <div key={o.id} style={styles.row}>
+          <div>
+            <div style={{ fontWeight: 600 }}>€{o.total}</div>
+            <div style={{ fontSize: 13, color: "#888" }}>{o.created_at?.slice(0, 10)}</div>
           </div>
-          <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 16 }}>
-            <div style={styles.calcRow}><span>Autokollito ({stickerM2}m²):</span><span>€{stickerPrice.toFixed(2)}</span></div>
-            {withInstall && <div style={styles.calcRow}><span>Topothesia:</span><span>€{installPrice.toFixed(2)}</span></div>}
-            <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "8px 0" }} />
-            <div style={styles.calcRow}><span style={{ fontWeight: 700 }}>Synolo:</span><span style={{ color: "#22c55e", fontWeight: 700, fontSize: 20 }}>€{stickerTotal.toFixed(2)}</span></div>
-          </div>
+          <span style={statusColor(o.status)}>{o.status}</span>
         </div>
-      )}
+      ))}
+
+      <h3 style={styles.subtitle}>🧾 Timologia ({invoices.length})</h3>
+      {invoices.length === 0 && <div style={{ color: "#888", fontSize: 14 }}>Kanena timologio akoma</div>}
+      {invoices.map(inv => (
+        <div key={inv.id} style={styles.row}>
+          <div>
+            <div style={{ fontWeight: 600 }}>{inv.type}</div>
+            <div style={{ fontSize: 13, color: "#888" }}>{inv.created_at?.slice(0, 10)}</div>
+          </div>
+          <span style={{ fontWeight: 700, color: "#22c55e" }}>€{inv.total}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function MiniCalculator({ onSelect }) {
-  const [qty, setQty] = useState(100);
-  const [printSize, setPrintSize] = useState("A4");
-  const [shirtType, setShirtType] = useState("color");
-
-  const shirtCost = SHIRT_PRICES[shirtType]["normal"];
-  const dtfCost = SIZES_M2[printSize] * DTF_PRICE_PER_M2;
-  const salePrice = getSalePrice(qty);
-  const totalSale = salePrice * qty;
-
-  return (
-    <div style={{ background: "#f8fafc", borderRadius: 10, padding: 12, marginBottom: 10, border: "1px solid #e2e8f0" }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>🧮 Quick Calculator</div>
-      <select style={styles.input} value={shirtType} onChange={e => setShirtType(e.target.value)}>
-        <option value="white">White/Ash</option>
-        <option value="color">Color</option>
-      </select>
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        {Object.keys(SIZES_M2).map(s => (
-          <button key={s} onClick={() => setPrintSize(s)} style={{ ...styles.btnSmall, ...(printSize === s ? { background: "#1e293b", color: "white" } : {}) }}>{s}</button>
-        ))}
-      </div>
-      <input style={styles.input} type="number" placeholder="Posotita" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
-      <div style={{ fontSize: 13, marginBottom: 8 }}>
-        Kostos/tem: €{(shirtCost + dtfCost).toFixed(2)} | Timi: <strong>€{salePrice}/tem</strong> | Synolo: <strong style={{ color: "#22c55e" }}>€{totalSale.toFixed(2)}</strong>
-      </div>
-      <button style={styles.btn} onClick={() => onSelect(totalSale)}>✅ Xrisi €{totalSale.toFixed(2)}</button>
-    </div>
-  );
-}
-
-function Customers({ customers, refresh }) {
+function Customers({ customers, orders, refresh }) {
   const [form, setForm] = useState({ name: "", phone: "", email: "", notes: "" });
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   async function addCustomer() {
     if (!form.name) return;
@@ -294,6 +235,10 @@ function Customers({ customers, refresh }) {
     (c.phone || "").includes(search)
   );
 
+  if (selected) {
+    return <CustomerProfile customer={selected} orders={orders} onBack={() => setSelected(null)} />;
+  }
+
   return (
     <div>
       <div style={styles.rowBetween}>
@@ -310,19 +255,24 @@ function Customers({ customers, refresh }) {
         </div>
       )}
       <input style={{ ...styles.input, marginBottom: 12 }} placeholder="🔍 Search..." value={search} onChange={e => setSearch(e.target.value)} />
-      {filtered.map(c => (
-        <div key={c.id} style={styles.row}>
-          <div>
-            <div style={{ fontWeight: 600 }}>{c.name}</div>
-            <div style={{ fontSize: 13, color: "#888" }}>{c.phone} {c.email && `· ${c.email}`}</div>
+      {filtered.map(c => {
+        const customerOrders = orders.filter(o => o.customer_id === c.id);
+        const total = customerOrders.reduce((s, o) => s + (o.total || 0), 0);
+        return (
+          <div key={c.id} style={{ ...styles.row, cursor: "pointer" }} onClick={() => setSelected(c)}>
+            <div>
+              <div style={{ fontWeight: 600 }}>{c.name}</div>
+              <div style={{ fontSize: 13, color: "#888" }}>{c.phone} {c.email && `· ${c.email}`}</div>
+              {total > 0 && <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>€{total.toFixed(2)} synolo</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => window.open(`https://wa.me/${c.phone?.replace(/\D/g, '')}`, '_blank')} style={styles.btnWhatsapp}>💬</button>
+              {c.email && <button onClick={() => window.open(`mailto:${c.email}`, '_blank')} style={styles.btnEmail}>✉️</button>}
+              <button onClick={() => deleteCustomer(c.id)} style={styles.btnDelete}>🗑️</button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => window.open(`https://wa.me/${c.phone?.replace(/\D/g, '')}`, '_blank')} style={styles.btnWhatsapp}>💬</button>
-            {c.email && <button onClick={() => window.open(`mailto:${c.email}`, '_blank')} style={styles.btnEmail}>✉️</button>}
-            <button onClick={() => deleteCustomer(c.id)} style={styles.btnDelete}>🗑️</button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -552,6 +502,125 @@ function Invoices({ customers }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function MiniCalculator({ onSelect }) {
+  const [qty, setQty] = useState(100);
+  const [printSize, setPrintSize] = useState("A4");
+  const [shirtType, setShirtType] = useState("color");
+
+  const shirtCost = SHIRT_PRICES[shirtType]["normal"];
+  const dtfCost = SIZES_M2[printSize] * DTF_PRICE_PER_M2;
+  const salePrice = getSalePrice(qty);
+  const totalSale = salePrice * qty;
+
+  return (
+    <div style={{ background: "#f8fafc", borderRadius: 10, padding: 12, marginBottom: 10, border: "1px solid #e2e8f0" }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>🧮 Quick Calculator</div>
+      <select style={styles.input} value={shirtType} onChange={e => setShirtType(e.target.value)}>
+        <option value="white">White/Ash</option>
+        <option value="color">Color</option>
+      </select>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        {Object.keys(SIZES_M2).map(s => (
+          <button key={s} onClick={() => setPrintSize(s)} style={{ ...styles.btnSmall, ...(printSize === s ? { background: "#1e293b", color: "white" } : {}) }}>{s}</button>
+        ))}
+      </div>
+      <input style={styles.input} type="number" placeholder="Posotita" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+      <div style={{ fontSize: 13, marginBottom: 8 }}>
+        Kostos/tem: €{(shirtCost + dtfCost).toFixed(2)} | Timi: <strong>€{salePrice}/tem</strong> | Synolo: <strong style={{ color: "#22c55e" }}>€{totalSale.toFixed(2)}</strong>
+      </div>
+      <button style={styles.btn} onClick={() => onSelect(totalSale)}>✅ Xrisi €{totalSale.toFixed(2)}</button>
+    </div>
+  );
+}
+
+function Calculator() {
+  const [mode, setMode] = useState("shirts");
+  const [qty, setQty] = useState(100);
+  const [printSize, setPrintSize] = useState("A4");
+  const [shirtType, setShirtType] = useState("color");
+  const [isBig, setIsBig] = useState(false);
+  const [stickerM2, setStickerM2] = useState(1);
+  const [withInstall, setWithInstall] = useState(false);
+
+  const shirtCost = SHIRT_PRICES[shirtType][isBig ? "big" : "normal"];
+  const dtfCost = (SIZES_M2[printSize] * DTF_PRICE_PER_M2);
+  const costPerShirt = shirtCost + dtfCost;
+  const totalCost = costPerShirt * qty;
+  const salePrice = getSalePrice(qty);
+  const totalSale = salePrice * qty;
+  const profit = totalSale - totalCost;
+  const margin = ((profit / totalSale) * 100).toFixed(1);
+
+  const stickerPrice = stickerM2 <= 1 ? 45 : stickerM2 * 17.5;
+  const installPrice = withInstall ? stickerM2 * 20 : 0;
+  const stickerTotal = stickerPrice + installPrice;
+
+  return (
+    <div>
+      <h2 style={styles.title}>🧮 Calculator</h2>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setMode("shirts")} style={{ ...styles.btn, ...(mode !== "shirts" ? { background: "#e2e8f0", color: "#1e293b" } : {}) }}>👕 Faneles</button>
+        <button onClick={() => setMode("stickers")} style={{ ...styles.btn, ...(mode !== "stickers" ? { background: "#e2e8f0", color: "#1e293b" } : {}) }}>🏷️ Autokollita</button>
+      </div>
+
+      {mode === "shirts" && (
+        <div style={styles.form}>
+          <label style={styles.label}>Xroma fanelas:</label>
+          <select style={styles.input} value={shirtType} onChange={e => setShirtType(e.target.value)}>
+            <option value="white">White / Ash (€2.06)</option>
+            <option value="color">Color (€2.42)</option>
+          </select>
+          <label style={styles.label}>Megethos:</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <button onClick={() => setIsBig(false)} style={{ ...styles.btnSmall, ...(!isBig ? { background: "#1e293b", color: "white" } : {}) }}>Normal (XS-XL)</button>
+            <button onClick={() => setIsBig(true)} style={{ ...styles.btnSmall, ...(isBig ? { background: "#1e293b", color: "white" } : {}) }}>BIG (2XL-5XL)</button>
+          </div>
+          <label style={styles.label}>Megethos DTF:</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            {Object.keys(SIZES_M2).map(s => (
+              <button key={s} onClick={() => setPrintSize(s)} style={{ ...styles.btnSmall, ...(printSize === s ? { background: "#1e293b", color: "white" } : {}) }}>{s}</button>
+            ))}
+          </div>
+          <label style={styles.label}>Posotita:</label>
+          <input style={styles.input} type="number" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+          <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 16 }}>
+            <div style={styles.calcRow}><span>Kostos fanelas:</span><span>€{shirtCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kostos DTF ({printSize}):</span><span>€{dtfCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kostos/tem:</span><span style={{ fontWeight: 700 }}>€{costPerShirt.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Synoliko kostos:</span><span>€{totalCost.toFixed(2)}</span></div>
+            <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "8px 0" }} />
+            <div style={styles.calcRow}><span>Timi polisis/tem:</span><span style={{ color: "#3b82f6", fontWeight: 700 }}>€{salePrice.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Synolo polisis:</span><span style={{ color: "#3b82f6", fontWeight: 700 }}>€{totalSale.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kerdos:</span><span style={{ color: "#22c55e", fontWeight: 700 }}>€{profit.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Perithorio:</span><span style={{ color: "#22c55e", fontWeight: 700 }}>{margin}%</span></div>
+          </div>
+          <div style={{ marginTop: 12, padding: 10, background: "#fef9c3", borderRadius: 8, fontSize: 13 }}>
+            💡 {qty >= 100 ? "100+ tem → €6/tem" : qty >= 30 ? "30-99 tem → €7/tem" : qty >= 20 ? "20-29 tem → €8/tem" : "1-19 tem → €10/tem"}
+          </div>
+        </div>
+      )}
+
+      {mode === "stickers" && (
+        <div style={styles.form}>
+          <label style={styles.label}>Tetragwnika metra:</label>
+          <input style={styles.input} type="number" step="0.1" value={stickerM2} onChange={e => setStickerM2(parseFloat(e.target.value) || 0)} />
+          <label style={styles.label}>Topothesia:</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <button onClick={() => setWithInstall(false)} style={{ ...styles.btnSmall, ...(!withInstall ? { background: "#1e293b", color: "white" } : {}) }}>Xoris</button>
+            <button onClick={() => setWithInstall(true)} style={{ ...styles.btnSmall, ...(withInstall ? { background: "#1e293b", color: "white" } : {}) }}>Me topothesia (+€20/m²)</button>
+          </div>
+          <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 16 }}>
+            <div style={styles.calcRow}><span>Autokollito ({stickerM2}m²):</span><span>€{stickerPrice.toFixed(2)}</span></div>
+            {withInstall && <div style={styles.calcRow}><span>Topothesia:</span><span>€{installPrice.toFixed(2)}</span></div>}
+            <hr style={{ border: "none", borderTop: "1px solid #e2e8f0", margin: "8px 0" }} />
+            <div style={styles.calcRow}><span style={{ fontWeight: 700 }}>Synolo:</span><span style={{ color: "#22c55e", fontWeight: 700, fontSize: 20 }}>€{stickerTotal.toFixed(2)}</span></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
