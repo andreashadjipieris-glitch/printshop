@@ -424,6 +424,7 @@ function Invoices({ customers, invoices, refresh }) {
   const [form, setForm] = useState({ customer_id: "", type: "Apodeixi", discount: 0 });
   const [items, setItems] = useState([{ description: "", quantity: 1, unit_price: 0 }]);
   const [showCalc, setShowCalc] = useState(false);
+  const [form, setForm] = useState({ customer_id: "", type: "Apodeixi", discount: 0, guest_name: "" });
 
   function updateItem(i, field, value) {
     const updated = [...items];
@@ -465,6 +466,12 @@ function Invoices({ customers, invoices, refresh }) {
         <div style={styles.form}>
           <select style={styles.input} value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })}>
             <option value="">Epilexe Pelati (prosaireto)</option>
+          </select>
+          <input style={styles.input} placeholder="Onoma Perati (an den einai pelatis)" value={form.guest_name || ""} onChange={e => setForm({ ...form, guest_name: e.target.value })} />
+          <select style={styles.input} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+            <option value="Apodeixi">Apodeixi</option>
+            <option value="Timologio">Timologio</option>
+            <option value="Prosfora">Prosfora</option>
             {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <input style={styles.input} placeholder="Onoma Perati (an den einai pelatis)" value={form.guest_name || ""} onChange={e => setForm({ ...form, guest_name: e.target.value })} />
