@@ -46,7 +46,7 @@ function generatePDF(inv, items) {
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
   doc.text(`Type: ${inv.type}`, 20, 32);
-  doc.text(`Customer: ${inv.customers?.name || ""}`, 20, 42);
+  doc.text(`Customer: ${inv.customers?.name || inv.guest_name || "Perastikos"}`, 20, 42);
   doc.text(`Date: ${new Date(inv.created_at).toLocaleDateString("en-GB")}`, 20, 52);
   doc.line(20, 58, 190, 58);
   doc.setFont("helvetica", "bold");
@@ -436,7 +436,7 @@ function Invoices({ customers, invoices, refresh }) {
   const total = subtotal - (form.discount || 0);
 
   async function saveInvoice() {
-    if (!form.customer_id) return;
+    if (!form.customer_id && !form.guest_name) return;
     const { data: inv } = await supabase.from("invoices").insert([{ ...form, total }]).select().single();
     await supabase.from("invoice_items").insert(items.map(i => ({ ...i, invoice_id: inv.id })));
     setAdding(false);
@@ -464,10 +464,11 @@ function Invoices({ customers, invoices, refresh }) {
       {adding && (
         <div style={styles.form}>
           <select style={styles.input} value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })}>
-            <option value="">Epilexe Pelati</option>
+            <option value="">Epilexe Pelati (prosaireto)</option>
             {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <select style={styles.input} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+          <input style={styles.input} placeholder="Onoma Perati (an den einai pelatis)" value={form.guest_name || ""} onChange={e => setForm({ ...form, guest_name: e.target.value })} />
+            <select style={styles.input} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
             <option value="Apodeixi">Apodeixi</option>
             <option value="Timologio">Timologio</option>
             <option value="Prosfora">Prosfora</option>
@@ -499,7 +500,7 @@ function Invoices({ customers, invoices, refresh }) {
       {invoices.map(inv => (
         <div key={inv.id} style={styles.row}>
           <div>
-            <div style={{ fontWeight: 600 }}>{inv.customers?.name}</div>
+            <div style={{ fontWeight: 600 }}>{inv.customers?.name || inv.guest_name || "Perastikos"}</div>
             <div style={{ fontSize: 13, color: "#888" }}>{inv.type} · {inv.created_at?.slice(0, 10)}</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
