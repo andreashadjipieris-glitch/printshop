@@ -340,7 +340,8 @@ function Invoices({ customers, invoices, refresh }) {
   const total = subtotal - (form.discount||0);
   async function saveInvoice() {
     if (!form.customer_id && !form.guest_name) return;
-    const { data: inv } = await supabase.from("invoices").insert([{ ...form, total }]).select().single();
+    const invoiceData = { ...form, total, customer_id: form.customer_id || null };
+    const { data: inv } = await supabase.from("invoices").insert([invoiceData]).select().single();
     await supabase.from("invoice_items").insert(items.map(i => ({ ...i, invoice_id:inv.id })));
     setAdding(false); setForm({ customer_id:"", guest_name:"", type:"Apodeixi", discount:0 });
     setItems([{ description:"", quantity:1, unit_price:0 }]); refresh();
