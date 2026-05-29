@@ -6,11 +6,15 @@ const supabase = createClient(
   "https://uuwnlpaznvvorbmvthvh.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d25scGF6bnZ2b3JibXZ0aHZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjMxMjksImV4cCI6MjA5MjgzOTEyOX0.DWYsfL06lTeBM0DKyIwPJ2aoe83X2YFaFLJIkFEf4K0"
 );
+
 const TABS = ["Dashboard", "Pelates", "Paraggellies", "Leads", "Timologia", "Exoda", "Tasks", "Calculator"];
 const DTF_PRICE_PER_M2 = 7.2;
 const SIZES_M2 = { "A5": 0.031, "A4": 0.062, "A3": 0.125, "A2": 0.25 };
-const SHIRT_PRICES = { white: { normal: 2.06, big: 2.42 }, color: { normal: 2.42, big: 2.96 } };
+// Τιμές φανελών με ΦΠΑ 19%
+const SHIRT_PRICES = { white: { normal: 2.45, big: 2.88 }, color: { normal: 2.88, big: 3.52 } };
 const EXPENSE_CATEGORIES = ["Ylika DTF", "Faneles", "Autokollita", "Michanima", "Aravio", "Logariasmos", "Allo"];
+const HOURLY_RATE_ME = 6;
+const HOURLY_RATE_MOM = 3.29;
 
 function getSalePrice(qty) {
   if (qty >= 100) return 6; if (qty >= 30) return 7; if (qty >= 20) return 8; return 10;
@@ -129,7 +133,10 @@ function Dashboard({ orders, customers, leads, expenses, invoices }) {
   const todayLeads = leads.filter(l => l.created_at?.slice(0,10) === new Date().toISOString().slice(0,10)).length;
   const totalSales = orders.reduce((s,o) => s+(o.total||0), 0);
   const totalExpenses = expenses.reduce((s,e) => s+(e.amount||0), 0);
-  const profit = totalSales - totalExpenses;
+  const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME), 0);
+  const totalLaborMom = orders.reduce((s,o) => s+((o.hours_mom||0)*HOURLY_RATE_MOM), 0);
+  const totalCost = totalExpenses + totalLaborMe + totalLaborMom;
+  const profit = totalSales - totalCost;
   return (
     <div>
       <h2 style={styles.title}>Kalimera 👋</h2>
@@ -139,14 +146,18 @@ function Dashboard({ orders, customers, leads, expenses, invoices }) {
         <Card label="Pelates" value={customers.length} color="#3b82f6" />
         <Card label="Leads Simera" value={todayLeads} color="#a855f7" />
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-        <div style={{ background:"white", borderRadius:12, padding:14, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #ef4444" }}>
-          <div style={{ fontSize:20, fontWeight:700, color:"#ef4444" }}>€{totalExpenses.toFixed(2)}</div>
-          <div style={{ fontSize:12, color:"#888", marginTop:2 }}>Synolo Exodon</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #ef4444", textAlign:"center" }}>
+          <div style={{ fontSize:18, fontWeight:700, color:"#ef4444" }}>€{totalExpenses.toFixed(0)}</div>
+          <div style={{ fontSize:11, color:"#888" }}>Exoda</div>
         </div>
-        <div style={{ background:"white", borderRadius:12, padding:14, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}` }}>
-          <div style={{ fontSize:20, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(2)}</div>
-          <div style={{ fontSize:12, color:"#888", marginTop:2 }}>Katharo Kerdos</div>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #f59e0b", textAlign:"center" }}>
+          <div style={{ fontSize:18, fontWeight:700, color:"#f59e0b" }}>€{(totalLaborMe+totalLaborMom).toFixed(0)}</div>
+          <div style={{ fontSize:11, color:"#888" }}>Ergasia</div>
+        </div>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}`, textAlign:"center" }}>
+          <div style={{ fontSize:18, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(0)}</div>
+          <div style={{ fontSize:11, color:"#888" }}>Katharo Kerdos</div>
         </div>
       </div>
       <MonthlyChart orders={orders} invoices={invoices} />
@@ -273,13 +284,13 @@ function Customers({ customers, orders, invoices, refresh }) {
 }
 
 function Orders({ orders, customers, refresh }) {
-  const [form, setForm] = useState({ customer_id:"", status:"Se anamoni", total:"", notes:"" });
+  const [form, setForm] = useState({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0 });
   const [adding, setAdding] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   async function addOrder() {
     if (!form.customer_id) return;
-    await supabase.from("orders").insert([{ ...form, total:parseFloat(form.total)||0 }]);
-    setForm({ customer_id:"", status:"Se anamoni", total:"", notes:"" }); setAdding(false); refresh();
+    await supabase.from("orders").insert([{ ...form, total:parseFloat(form.total)||0, hours_me:parseFloat(form.hours_me)||0, hours_mom:parseFloat(form.hours_mom)||0 }]);
+    setForm({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0 }); setAdding(false); refresh();
   }
   async function updateStatus(id, status) { await supabase.from("orders").update({ status }).eq("id", id); refresh(); }
   async function deleteOrder(id) {
@@ -305,21 +316,90 @@ function Orders({ orders, customers, refresh }) {
           {showCalc && <MiniCalculator onSelect={total => { setForm({...form, total:total.toString()}); setShowCalc(false); }} />}
           <input style={styles.input} placeholder="Synolo €" type="number" value={form.total} onChange={e => setForm({...form, total:e.target.value})} />
           <input style={styles.input} placeholder="Simeiosis" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} />
+          <div style={{ display:"flex", gap:8 }}>
+            <div style={{ flex:1 }}>
+              <label style={styles.label}>⏱ Ores Ego:</label>
+              <input style={styles.input} type="number" step="0.5" value={form.hours_me} onChange={e => setForm({...form, hours_me:e.target.value})} />
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={styles.label}>⏱ Ores Mitera:</label>
+              <input style={styles.input} type="number" step="0.5" value={form.hours_mom} onChange={e => setForm({...form, hours_mom:e.target.value})} />
+            </div>
+          </div>
+          <div style={{ background:"#f1f5f9", borderRadius:8, padding:10, fontSize:13, marginBottom:10 }}>
+            💰 Kostos ergasias: €{((parseFloat(form.hours_me)||0)*HOURLY_RATE_ME + (parseFloat(form.hours_mom)||0)*HOURLY_RATE_MOM).toFixed(2)}
+            {" "}| Kerdos: <strong style={{ color:"#22c55e" }}>€{((parseFloat(form.total)||0) - ((parseFloat(form.hours_me)||0)*HOURLY_RATE_ME + (parseFloat(form.hours_mom)||0)*HOURLY_RATE_MOM)).toFixed(2)}</strong>
+          </div>
           <button style={styles.btn} onClick={addOrder}>💾 Save</button>
         </div>
       )}
-      {orders.map(o => (
-        <div key={o.id} style={styles.row}>
+      {orders.map(o => {
+        const laborCost = ((o.hours_me||0)*HOURLY_RATE_ME) + ((o.hours_mom||0)*HOURLY_RATE_MOM);
+        const orderProfit = (o.total||0) - laborCost;
+        return (
+          <div key={o.id} style={styles.row}>
+            <div>
+              <div style={{ fontWeight:600 }}>{o.customers?.name||"—"}</div>
+              <div style={{ fontSize:13, color:"#888" }}>€{o.total} · {o.created_at?.slice(0,10)}</div>
+              {(o.hours_me||o.hours_mom) ? <div style={{ fontSize:12, color:"#64748b" }}>⏱ {o.hours_me||0}h ego + {o.hours_mom||0}h mitera | Kerdos: <span style={{ color:orderProfit>=0?"#22c55e":"#ef4444", fontWeight:600 }}>€{orderProfit.toFixed(2)}</span></div> : null}
+              {o.notes && <div style={{ fontSize:12, color:"#64748b" }}>{o.notes}</div>}
+            </div>
+            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <select value={o.status} onChange={e => updateStatus(o.id, e.target.value)} style={{ border:"none", background:"transparent", fontWeight:600, fontSize:13 }}>
+                {["Se anamoni","Se ektiposi","Etoimo","Paradothike"].map(s => <option key={s}>{s}</option>)}
+              </select>
+              <button onClick={() => deleteOrder(o.id)} style={styles.btnDelete}>🗑️</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LeadsTab({ leads, refresh }) {
+  const [form, setForm] = useState({ name:"", phone:"", source:"Instagram", status:"Neo", notes:"" });
+  const [adding, setAdding] = useState(false);
+  async function addLead() {
+    if (!form.name) return;
+    await supabase.from("leads").insert([form]);
+    setForm({ name:"", phone:"", source:"Instagram", status:"Neo", notes:"" }); setAdding(false); refresh();
+  }
+  async function convertToCustomer(lead) {
+    await supabase.from("customers").insert([{ name:lead.name, phone:lead.phone }]);
+    await supabase.from("leads").update({ status:"Ekleise" }).eq("id", lead.id); refresh();
+  }
+  async function deleteLead(id) {
+    if (!confirm("Diagrafi lead;")) return;
+    await supabase.from("leads").delete().eq("id", id); refresh();
+  }
+  return (
+    <div>
+      <div style={styles.rowBetween}>
+        <h2 style={styles.title}>Leads</h2>
+        <button style={styles.btn} onClick={() => setAdding(!adding)}>+ Neo</button>
+      </div>
+      {adding && (
+        <div style={styles.form}>
+          <input style={styles.input} placeholder="Onoma *" value={form.name} onChange={e => setForm({...form, name:e.target.value})} />
+          <input style={styles.input} placeholder="Tilefono" value={form.phone} onChange={e => setForm({...form, phone:e.target.value})} />
+          <select style={styles.input} value={form.source} onChange={e => setForm({...form, source:e.target.value})}>
+            {["Instagram","WhatsApp","Tilefono"].map(s => <option key={s}>{s}</option>)}
+          </select>
+          <input style={styles.input} placeholder="Simeiosis" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} />
+          <button style={styles.btn} onClick={addLead}>💾 Save</button>
+        </div>
+      )}
+      {leads.map(l => (
+        <div key={l.id} style={styles.row}>
           <div>
-            <div style={{ fontWeight:600 }}>{o.customers?.name||"—"}</div>
-            <div style={{ fontSize:13, color:"#888" }}>€{o.total} · {o.created_at?.slice(0,10)}</div>
-            {o.notes && <div style={{ fontSize:12, color:"#64748b" }}>{o.notes}</div>}
+            <div style={{ fontWeight:600 }}>{l.name}</div>
+            <div style={{ fontSize:13, color:"#888" }}>{l.source} · {l.phone}</div>
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <select value={o.status} onChange={e => updateStatus(o.id, e.target.value)} style={{ border:"none", background:"transparent", fontWeight:600, fontSize:13 }}>
-              {["Se anamoni","Se ektiposi","Etoimo","Paradothike"].map(s => <option key={s}>{s}</option>)}
-            </select>
-            <button onClick={() => deleteOrder(o.id)} style={styles.btnDelete}>🗑️</button>
+            <span style={statusColor(l.status)}>{l.status}</span>
+            {l.status !== "Ekleise" && <button onClick={() => convertToCustomer(l)} style={styles.btnSmall}>→ Pelatis</button>}
+            <button onClick={() => deleteLead(l.id)} style={styles.btnDelete}>🗑️</button>
           </div>
         </div>
       ))}
@@ -405,55 +485,6 @@ function Invoices({ customers, invoices, refresh }) {
     </div>
   );
 }
-function LeadsTab({ leads, refresh }) {
-  const [form, setForm] = useState({ name:"", phone:"", source:"Instagram", status:"Neo", notes:"" });
-  const [adding, setAdding] = useState(false);
-  async function addLead() {
-    if (!form.name) return;
-    await supabase.from("leads").insert([form]);
-    setForm({ name:"", phone:"", source:"Instagram", status:"Neo", notes:"" }); setAdding(false); refresh();
-  }
-  async function convertToCustomer(lead) {
-    await supabase.from("customers").insert([{ name:lead.name, phone:lead.phone }]);
-    await supabase.from("leads").update({ status:"Ekleise" }).eq("id", lead.id); refresh();
-  }
-  async function deleteLead(id) {
-    if (!confirm("Diagrafi lead;")) return;
-    await supabase.from("leads").delete().eq("id", id); refresh();
-  }
-  return (
-    <div>
-      <div style={styles.rowBetween}>
-        <h2 style={styles.title}>Leads</h2>
-        <button style={styles.btn} onClick={() => setAdding(!adding)}>+ Neo</button>
-      </div>
-      {adding && (
-        <div style={styles.form}>
-          <input style={styles.input} placeholder="Onoma *" value={form.name} onChange={e => setForm({...form, name:e.target.value})} />
-          <input style={styles.input} placeholder="Tilefono" value={form.phone} onChange={e => setForm({...form, phone:e.target.value})} />
-          <select style={styles.input} value={form.source} onChange={e => setForm({...form, source:e.target.value})}>
-            {["Instagram","WhatsApp","Tilefono"].map(s => <option key={s}>{s}</option>)}
-          </select>
-          <input style={styles.input} placeholder="Simeiosis" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} />
-          <button style={styles.btn} onClick={addLead}>💾 Save</button>
-        </div>
-      )}
-      {leads.map(l => (
-        <div key={l.id} style={styles.row}>
-          <div>
-            <div style={{ fontWeight:600 }}>{l.name}</div>
-            <div style={{ fontSize:13, color:"#888" }}>{l.source} · {l.phone}</div>
-          </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <span style={statusColor(l.status)}>{l.status}</span>
-            {l.status !== "Ekleise" && <button onClick={() => convertToCustomer(l)} style={styles.btnSmall}>→ Pelatis</button>}
-            <button onClick={() => deleteLead(l.id)} style={styles.btnDelete}>🗑️</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function Expenses({ expenses, orders, invoices, refresh }) {
   const [adding, setAdding] = useState(false);
@@ -469,10 +500,12 @@ function Expenses({ expenses, orders, invoices, refresh }) {
   }
   const totalExpenses = expenses.reduce((s,e) => s+(e.amount||0), 0);
   const totalSales = orders.reduce((s,o) => s+(o.total||0), 0);
-  const totalInvoiced = invoices.reduce((s,i) => s+(i.total||0), 0);
-  const revenue = Math.max(totalSales, totalInvoiced);
-  const profit = revenue - totalExpenses;
-  const margin = revenue > 0 ? ((profit/revenue)*100).toFixed(1) : 0;
+  const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME), 0);
+  const totalLaborMom = orders.reduce((s,o) => s+((o.hours_mom||0)*HOURLY_RATE_MOM), 0);
+  const totalLabor = totalLaborMe + totalLaborMom;
+  const totalCost = totalExpenses + totalLabor;
+  const profit = totalSales - totalCost;
+  const margin = totalSales > 0 ? ((profit/totalSales)*100).toFixed(1) : 0;
   const byCategory = EXPENSE_CATEGORIES.map(cat => ({ cat, total:expenses.filter(e=>e.category===cat).reduce((s,e)=>s+(e.amount||0),0) })).filter(x=>x.total>0);
   return (
     <div>
@@ -480,23 +513,43 @@ function Expenses({ expenses, orders, invoices, refresh }) {
         <h2 style={styles.title}>💸 Exoda & Kerdos</h2>
         <button style={styles.btn} onClick={() => setAdding(!adding)}>+ Neo</button>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
-        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #3b82f6", textAlign:"center" }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#3b82f6" }}>€{revenue.toFixed(0)}</div>
-          <div style={{ fontSize:11, color:"#888" }}>Esoda</div>
+
+      {/* Συνοπτικά */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #3b82f6" }}>
+          <div style={{ fontSize:20, fontWeight:700, color:"#3b82f6" }}>€{totalSales.toFixed(2)}</div>
+          <div style={{ fontSize:12, color:"#888" }}>Synolo Esodwn</div>
         </div>
-        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #ef4444", textAlign:"center" }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#ef4444" }}>€{totalExpenses.toFixed(0)}</div>
-          <div style={{ fontSize:11, color:"#888" }}>Exoda</div>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #ef4444" }}>
+          <div style={{ fontSize:20, fontWeight:700, color:"#ef4444" }}>€{totalExpenses.toFixed(2)}</div>
+          <div style={{ fontSize:12, color:"#888" }}>Ylika & Exoda</div>
         </div>
-        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}`, textAlign:"center" }}>
-          <div style={{ fontSize:18, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(0)}</div>
-          <div style={{ fontSize:11, color:"#888" }}>Kerdos ({margin}%)</div>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #f59e0b" }}>
+          <div style={{ fontSize:20, fontWeight:700, color:"#f59e0b" }}>€{totalLabor.toFixed(2)}</div>
+          <div style={{ fontSize:12, color:"#888" }}>Ergasia (Ego + Mitera)</div>
+        </div>
+        <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}` }}>
+          <div style={{ fontSize:20, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(2)}</div>
+          <div style={{ fontSize:12, color:"#888" }}>Katharo Kerdos ({margin}%)</div>
         </div>
       </div>
+
+      {/* Ανάλυση εργασίας */}
+      <div style={{ background:"white", borderRadius:12, padding:14, marginBottom:16, boxShadow:"0 1px 3px rgba(0,0,0,0.1)" }}>
+        <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>⏱ Analytika Ergasias</div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>Ego ({orders.reduce((s,o)=>s+(o.hours_me||0),0).toFixed(1)}h × €{HOURLY_RATE_ME}/h):</span>
+          <span style={{ fontWeight:600 }}>€{totalLaborMe.toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+          <span>Mitera ({orders.reduce((s,o)=>s+(o.hours_mom||0),0).toFixed(1)}h × €{HOURLY_RATE_MOM}/h):</span>
+          <span style={{ fontWeight:600 }}>€{totalLaborMom.toFixed(2)}</span>
+        </div>
+      </div>
+
       {byCategory.length>0 && (
         <div style={{ background:"white", borderRadius:12, padding:14, marginBottom:16, boxShadow:"0 1px 3px rgba(0,0,0,0.1)" }}>
-          <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>📂 Ana Katigoria</div>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>📂 Exoda Ana Katigoria</div>
           {byCategory.map(({ cat, total }) => {
             const pct = totalExpenses>0?(total/totalExpenses)*100:0;
             return (
@@ -512,6 +565,7 @@ function Expenses({ expenses, orders, invoices, refresh }) {
           })}
         </div>
       )}
+
       {adding && (
         <div style={styles.form}>
           <input style={styles.input} placeholder="Perigrafi *" value={form.description} onChange={e => setForm({...form, description:e.target.value})} />
@@ -550,6 +604,8 @@ function MiniCalculator({ onSelect }) {
   const dtfCost = SIZES_M2[printSize] * DTF_PRICE_PER_M2;
   const salePrice = getSalePrice(qty);
   const totalSale = salePrice * qty;
+  const totalCost = (shirtCost + dtfCost) * qty;
+  const profit = totalSale - totalCost;
   return (
     <div style={{ background:"#f8fafc", borderRadius:10, padding:12, marginBottom:10, border:"1px solid #e2e8f0" }}>
       <div style={{ fontWeight:600, marginBottom:8 }}>🧮 Quick Calculator</div>
@@ -560,7 +616,10 @@ function MiniCalculator({ onSelect }) {
         {Object.keys(SIZES_M2).map(s => <button key={s} onClick={() => setPrintSize(s)} style={{ ...styles.btnSmall, ...(printSize===s?{background:"#1e293b",color:"white"}:{}) }}>{s}</button>)}
       </div>
       <input style={styles.input} type="number" placeholder="Posotita" value={qty} onChange={e => setQty(parseInt(e.target.value)||1)} />
-      <div style={{ fontSize:13, marginBottom:8 }}>Kostos/tem: €{(shirtCost+dtfCost).toFixed(2)} | Timi: <strong>€{salePrice}/tem</strong> | Synolo: <strong style={{ color:"#22c55e" }}>€{totalSale.toFixed(2)}</strong></div>
+      <div style={{ fontSize:13, marginBottom:8 }}>
+        Kostos/tem (me ΦΠΑ): €{(shirtCost+dtfCost).toFixed(2)} | Timi: <strong>€{salePrice}/tem</strong> | Synolo: <strong style={{ color:"#22c55e" }}>€{totalSale.toFixed(2)}</strong>
+        {" "}| Kerdos ylikon: <strong style={{ color:"#3b82f6" }}>€{profit.toFixed(2)}</strong>
+      </div>
       <button style={styles.btn} onClick={() => onSelect(totalSale)}>✅ Xrisi €{totalSale.toFixed(2)}</button>
     </div>
   );
@@ -574,14 +633,18 @@ function Calculator() {
   const [isBig, setIsBig] = useState(false);
   const [stickerM2, setStickerM2] = useState(1);
   const [withInstall, setWithInstall] = useState(false);
+  const [hoursMe, setHoursMe] = useState(0);
+  const [hoursMom, setHoursMom] = useState(0);
   const shirtCost = SHIRT_PRICES[shirtType][isBig?"big":"normal"];
   const dtfCost = SIZES_M2[printSize] * DTF_PRICE_PER_M2;
   const costPerShirt = shirtCost + dtfCost;
-  const totalCost = costPerShirt * qty;
+  const totalMaterialCost = costPerShirt * qty;
+  const laborCost = (hoursMe * HOURLY_RATE_ME) + (hoursMom * HOURLY_RATE_MOM);
+  const totalCost = totalMaterialCost + laborCost;
   const salePrice = getSalePrice(qty);
   const totalSale = salePrice * qty;
   const profit = totalSale - totalCost;
-  const margin = ((profit/totalSale)*100).toFixed(1);
+  const margin = totalSale > 0 ? ((profit/totalSale)*100).toFixed(1) : 0;
   const stickerPrice = stickerM2<=1?45:stickerM2*17.5;
   const installPrice = withInstall?stickerM2*20:0;
   const stickerTotal = stickerPrice + installPrice;
@@ -596,7 +659,8 @@ function Calculator() {
         <div style={styles.form}>
           <label style={styles.label}>Xroma fanelas:</label>
           <select style={styles.input} value={shirtType} onChange={e => setShirtType(e.target.value)}>
-            <option value="white">White / Ash (€2.06)</option><option value="color">Color (€2.42)</option>
+            <option value="white">White / Ash (€2.45 me ΦΠΑ)</option>
+            <option value="color">Color (€2.88 me ΦΠΑ)</option>
           </select>
           <label style={styles.label}>Megethos:</label>
           <div style={{ display:"flex", gap:8, marginBottom:10 }}>
@@ -609,16 +673,28 @@ function Calculator() {
           </div>
           <label style={styles.label}>Posotita:</label>
           <input style={styles.input} type="number" value={qty} onChange={e => setQty(parseInt(e.target.value)||1)} />
+          <div style={{ display:"flex", gap:8 }}>
+            <div style={{ flex:1 }}>
+              <label style={styles.label}>⏱ Ores Ego:</label>
+              <input style={styles.input} type="number" step="0.5" value={hoursMe} onChange={e => setHoursMe(parseFloat(e.target.value)||0)} />
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={styles.label}>⏱ Ores Mitera:</label>
+              <input style={styles.input} type="number" step="0.5" value={hoursMom} onChange={e => setHoursMom(parseFloat(e.target.value)||0)} />
+            </div>
+          </div>
           <div style={{ background:"#f1f5f9", borderRadius:10, padding:16 }}>
-            <div style={styles.calcRow}><span>Kostos fanelas:</span><span>€{shirtCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kostos fanelas (me ΦΠΑ):</span><span>€{shirtCost.toFixed(2)}</span></div>
             <div style={styles.calcRow}><span>Kostos DTF ({printSize}):</span><span>€{dtfCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos/tem:</span><span style={{ fontWeight:700 }}>€{costPerShirt.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Synoliko kostos:</span><span>€{totalCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kostos ylikon/tem:</span><span style={{ fontWeight:700 }}>€{costPerShirt.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Synoliko kostos ylikon:</span><span>€{totalMaterialCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Kostos ergasias:</span><span>€{laborCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span style={{ fontWeight:700 }}>Synoliko kostos:</span><span style={{ fontWeight:700 }}>€{totalCost.toFixed(2)}</span></div>
             <hr style={{ border:"none", borderTop:"1px solid #e2e8f0", margin:"8px 0" }} />
             <div style={styles.calcRow}><span>Timi polisis/tem:</span><span style={{ color:"#3b82f6", fontWeight:700 }}>€{salePrice.toFixed(2)}</span></div>
             <div style={styles.calcRow}><span>Synolo polisis:</span><span style={{ color:"#3b82f6", fontWeight:700 }}>€{totalSale.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kerdos:</span><span style={{ color:"#22c55e", fontWeight:700 }}>€{profit.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Perithorio:</span><span style={{ color:"#22c55e", fontWeight:700 }}>{margin}%</span></div>
+            <div style={styles.calcRow}><span>Katharo Kerdos:</span><span style={{ color:profit>=0?"#22c55e":"#ef4444", fontWeight:700 }}>€{profit.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Perithorio:</span><span style={{ color:profit>=0?"#22c55e":"#ef4444", fontWeight:700 }}>{margin}%</span></div>
           </div>
           <div style={{ marginTop:12, padding:10, background:"#fef9c3", borderRadius:8, fontSize:13 }}>
             💡 {qty>=100?"100+ tem → €6/tem":qty>=30?"30-99 tem → €7/tem":qty>=20?"20-29 tem → €8/tem":"1-19 tem → €10/tem"}
