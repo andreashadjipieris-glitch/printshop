@@ -7,7 +7,7 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1d25scGF6bnZ2b3JibXZ0aHZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjMxMjksImV4cCI6MjA5MjgzOTEyOX0.DWYsfL06lTeBM0DKyIwPJ2aoe83X2YFaFLJIkFEf4K0"
 );
 
-const TABS = ["Dashboard", "Pelates", "Paraggellies", "Leads", "Timologia", "Exoda", "Tasks", "Calculator"];
+const TABS = ["Dashboard", "Pelates", "Paraggellies", "Leads", "Timologia", "Exoda", "Report", "Tasks", "Calculator"];
 const DTF_PRICE_PER_M2 = 7.2;
 const SIZES_M2 = { "A5": 0.031, "A4": 0.062, "A3": 0.125, "A2": 0.25 };
 // Τιμές φανελών με ΦΠΑ 19%
@@ -87,6 +87,7 @@ export default function App() {
         {tab === "Leads" && <LeadsTab leads={leads} refresh={fetchAll} />}
         {tab === "Timologia" && <Invoices customers={customers} invoices={invoices} refresh={fetchAll} />}
         {tab === "Exoda" && <Expenses expenses={expenses} orders={orders} invoices={invoices} refresh={fetchAll} />}
+        {tab === "Report" && <MonthlyReport orders={orders} expenses={expenses} />}
         {tab === "Tasks" && <Tasks />}
         {tab === "Calculator" && <Calculator />}
       </div>
@@ -828,3 +829,165 @@ const styles = {
   btnEmail:{ background:"#dbeafe", color:"#2563eb", border:"none", borderRadius:6, padding:"6px 10px", fontSize:16, cursor:"pointer" },
   calcRow:{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:14 },
 };
+
+// ─── MONTHLY REPORT ──────────────────────────────────────────────────────────
+function MonthlyReport({ orders, expenses }) {
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  const months = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
+
+  // Φιλτράρισμα παραγγελιών του μήνα
+  const monthOrders = orders.filter(o => {
+    const d = new Date(o.created_at);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+
+  // Φιλτράρισμα εξόδων του μήνα
+  const monthExpenses = expenses.filter(e => {
+    const d = new Date(e.date || e.created_at);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+
+  // Υπολογισμοί
+  const totalRevenue = monthOrders.reduce((s,o) => s+(o.total||0), 0);
+  const totalMaterials = monthExpenses.reduce((s,e) => s+(e.amount||0), 0);
+  const totalHoursMe = monthOrders.reduce((s,o) => s+(o.hours_me||0), 0);
+  const totalHoursMom = monthOrders.reduce((s,o) => s+(o.hours_mom||0), 0);
+  const laborMe = totalHoursMe * HOURLY_RATE_ME;
+  const laborMom = totalHoursMom * HOURLY_RATE_MOM;
+  const totalLabor = laborMe + laborMom;
+  const totalCost = totalMaterials + totalLabor;
+  const netProfit = totalRevenue - totalCost;
+  const remaining = netProfit; // μετά από όλα
+
+  // Κατηγορίες εξόδων
+  const byCategory = EXPENSE_CATEGORIES.map(cat => ({
+    cat,
+    total: monthExpenses.filter(e=>e.category===cat).reduce((s,e)=>s+(e.amount||0),0)
+  })).filter(x=>x.total>0);
+
+  // Last 6 months για navigation
+  const monthOptions = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthOptions.push({ month: d.getMonth(), year: d.getFullYear(), label: `${months[d.getMonth()]} ${d.getFullYear()}` });
+  }
+
+  return (
+    <div>
+      <h2 style={styles.title}>📅 Monthly Report</h2>
+
+      {/* Month selector */}
+      <div style={{ display:"flex", gap:8, marginBottom:16, overflowX:"auto" }}>
+        {monthOptions.map(({ month, year, label }) => (
+          <button key={`${month}-${year}`}
+            onClick={() => { setSelectedMonth(month); setSelectedYear(year); }}
+            style={{ ...styles.btnSmall, whiteSpace:"nowrap", ...(month===selectedMonth&&year===selectedYear?{background:"#1e293b",color:"white"}:{}) }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div style={{ background:"#1e293b", borderRadius:12, padding:16, marginBottom:16, color:"white" }}>
+        <div style={{ fontSize:18, fontWeight:700 }}>{months[selectedMonth]} {selectedYear}</div>
+        <div style={{ fontSize:13, opacity:0.7, marginTop:4 }}>{monthOrders.length} paraggellies · {monthExpenses.length} exoda</div>
+      </div>
+
+      {/* Έσοδα */}
+      <div style={{ background:"white", borderRadius:12, padding:16, marginBottom:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderLeft:"4px solid #22c55e" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:16 }}>💰 Esoda</div>
+            <div style={{ fontSize:13, color:"#888", marginTop:2 }}>{monthOrders.length} paraggellies</div>
+          </div>
+          <div style={{ fontSize:24, fontWeight:700, color:"#22c55e" }}>€{totalRevenue.toFixed(2)}</div>
+        </div>
+      </div>
+
+      {/* Έξοδα υλικών */}
+      <div style={{ background:"white", borderRadius:12, padding:16, marginBottom:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderLeft:"4px solid #ef4444" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: byCategory.length>0?10:0 }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:16 }}>📦 Ylika & Exoda</div>
+            <div style={{ fontSize:13, color:"#888", marginTop:2 }}>{monthExpenses.length} eggrafes</div>
+          </div>
+          <div style={{ fontSize:24, fontWeight:700, color:"#ef4444" }}>€{totalMaterials.toFixed(2)}</div>
+        </div>
+        {byCategory.map(({ cat, total }) => (
+          <div key={cat} style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#64748b", paddingTop:6, borderTop:"1px solid #f1f5f9" }}>
+            <span>{cat}</span><span>€{total.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Εργασία */}
+      <div style={{ background:"white", borderRadius:12, padding:16, marginBottom:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderLeft:"4px solid #f59e0b" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+          <div style={{ fontWeight:700, fontSize:16 }}>⏱ Ergasia</div>
+          <div style={{ fontSize:24, fontWeight:700, color:"#f59e0b" }}>€{totalLabor.toFixed(2)}</div>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#64748b", paddingTop:6, borderTop:"1px solid #f1f5f9" }}>
+          <span>Ego ({totalHoursMe.toFixed(1)}h × €{HOURLY_RATE_ME})</span>
+          <span style={{ fontWeight:600 }}>€{laborMe.toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#64748b", paddingTop:6, borderTop:"1px solid #f1f5f9" }}>
+          <span>Mitera ({totalHoursMom.toFixed(1)}h × €{HOURLY_RATE_MOM})</span>
+          <span style={{ fontWeight:600 }}>€{laborMom.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Σύνολο εξόδων */}
+      <div style={{ background:"#fee2e2", borderRadius:12, padding:14, marginBottom:12 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:700 }}>
+          <span>Synolo Exodon:</span>
+          <span style={{ color:"#ef4444" }}>€{totalCost.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Καθαρό κέρδος */}
+      <div style={{ background:netProfit>=0?"#dcfce7":"#fee2e2", borderRadius:12, padding:16, marginBottom:16, border:`2px solid ${netProfit>=0?"#22c55e":"#ef4444"}` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ fontWeight:700, fontSize:18 }}>🎯 Katharo Kerdos</div>
+          <div style={{ fontSize:28, fontWeight:700, color:netProfit>=0?"#22c55e":"#ef4444" }}>€{netProfit.toFixed(2)}</div>
+        </div>
+        <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${netProfit>=0?"#86efac":"#fca5a5"}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:6 }}>
+            <span>💼 Misthos Mitera:</span>
+            <span style={{ fontWeight:600, color:"#f59e0b" }}>€{laborMom.toFixed(2)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:6 }}>
+            <span>👤 Dikia mou amoivi:</span>
+            <span style={{ fontWeight:600, color:"#3b82f6" }}>€{laborMe.toFixed(2)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:700, paddingTop:8, borderTop:`1px solid ${netProfit>=0?"#86efac":"#fca5a5"}` }}>
+            <span>💰 Menei sti douleia:</span>
+            <span style={{ color:remaining>=0?"#22c55e":"#ef4444" }}>€{remaining.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Λίστα παραγγελιών */}
+      {monthOrders.length > 0 && (
+        <>
+          <h3 style={styles.subtitle}>📦 Paraggellies Mina</h3>
+          {monthOrders.map(o => {
+            const labor = ((o.hours_me||0)*HOURLY_RATE_ME) + ((o.hours_mom||0)*HOURLY_RATE_MOM);
+            const op = (o.total||0) - labor;
+            return (
+              <div key={o.id} style={styles.row}>
+                <div>
+                  <div style={{ fontWeight:600 }}>{o.customers?.name||"—"}</div>
+                  <div style={{ fontSize:13, color:"#888" }}>€{o.total} · {o.hours_me||0}h+{o.hours_mom||0}h</div>
+                </div>
+                <span style={{ fontWeight:700, color:op>=0?"#22c55e":"#ef4444" }}>€{op.toFixed(2)}</span>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
