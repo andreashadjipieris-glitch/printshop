@@ -87,7 +87,7 @@ export default function App() {
         {tab === "Leads" && <LeadsTab leads={leads} refresh={fetchAll} />}
         {tab === "Timologia" && <Invoices customers={customers} invoices={invoices} refresh={fetchAll} />}
         {tab === "Exoda" && <Expenses expenses={expenses} orders={orders} invoices={invoices} refresh={fetchAll} />}
-        {tab === "Report" && <MonthlyReport orders={orders} expenses={expenses} />}
+        {tab === "Report" && <MonthlyReport orders={orders} expenses={expenses} invoices={invoices} />}
         {tab === "Tasks" && <Tasks />}
         {tab === "Calculator" && <Calculator />}
       </div>
@@ -294,6 +294,26 @@ function Orders({ orders, customers, refresh }) {
     setForm({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0 }); setAdding(false); refresh();
   }
   async function updateStatus(id, status) { await supabase.from("orders").update({ status }).eq("id", id); refresh(); }
+  async function createInvoiceFromOrder(order) {
+    if (!confirm("Dimiourgia timologiou apo afti tin paraggelia;")) return;
+    const invData = {
+      customer_id: order.customer_id || null,
+      guest_name: !order.customer_id ? (order.customers?.name || null) : null,
+      type: "Apodeixi",
+      total: order.total,
+      discount: 0
+    };
+    const { data: inv } = await supabase.from("invoices").insert([invData]).select().single();
+    await supabase.from("invoice_items").insert([{
+      invoice_id: inv.id,
+      description: order.notes || "Paraggelia DTF",
+      quantity: 1,
+      unit_price: order.total,
+      total: order.total
+    }]);
+    alert("✅ Timologio dimiourghike!");
+    refresh();
+  }
   async function deleteOrder(id) {
     if (!confirm("Diagrafi paraggelias;")) return;
     await supabase.from("orders").delete().eq("id", id); refresh();
@@ -349,7 +369,8 @@ function Orders({ orders, customers, refresh }) {
               <select value={o.status} onChange={e => updateStatus(o.id, e.target.value)} style={{ border:"none", background:"transparent", fontWeight:600, fontSize:13 }}>
                 {["Se anamoni","Se ektiposi","Etoimo","Paradothike"].map(s => <option key={s}>{s}</option>)}
               </select>
-              <button onClick={() => deleteOrder(o.id)} style={styles.btnDelete}>🗑️</button>
+              {o.status === "Paradothike" && <button onClick={() => createInvoiceFromOrder(o)} style={{ ...styles.btnSmall, background:"#dcfce7", color:"#16a34a" }}>🧾</button>}
+            <button onClick={() => deleteOrder(o.id)} style={styles.btnDelete}>🗑️</button>
             </div>
           </div>
         );
@@ -831,7 +852,7 @@ const styles = {
 };
 
 // ─── MONTHLY REPORT ──────────────────────────────────────────────────────────
-function MonthlyReport({ orders, expenses }) {
+function MonthlyReport({ orders, expenses, invoices }) {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -850,8 +871,19 @@ function MonthlyReport({ orders, expenses }) {
     return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
   });
 
-  // Υπολογισμοί
-  const totalRevenue = monthOrders.reduce((s,o) => s+(o.total||0), 0);
+  // Τιμολόγια του μήνα
+  const monthInvoices = (invoices||[]).filter(inv => {
+    const d = new Date(inv.created_at);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+
+  // Έσοδα = παραγγελίες που ΔΕΝ έχουν τιμολόγιο + τιμολόγια
+  // Αν παραγγελία έχει customer_id που εμφανίζεται σε τιμολόγιο ίδιου μήνα → μετράμε μόνο τιμολόγιο
+  const invoicedCustomerIds = monthInvoices.filter(i=>i.customer_id).map(i=>i.customer_id);
+  const ordersWithoutInvoice = monthOrders.filter(o => !o.customer_id || !invoicedCustomerIds.includes(o.customer_id));
+  const totalFromOrders = ordersWithoutInvoice.reduce((s,o) => s+(o.total||0), 0);
+  const totalFromInvoices = monthInvoices.reduce((s,i) => s+(i.total||0), 0);
+  const totalRevenue = totalFromOrders + totalFromInvoices;
   const totalMaterials = monthExpenses.reduce((s,e) => s+(e.amount||0), 0);
   const totalHoursMe = monthOrders.reduce((s,o) => s+(o.hours_me||0), 0);
   const totalHoursMom = monthOrders.reduce((s,o) => s+(o.hours_mom||0), 0);
@@ -898,13 +930,14 @@ function MonthlyReport({ orders, expenses }) {
 
       {/* Έσοδα */}
       <div style={{ background:"white", borderRadius:12, padding:16, marginBottom:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderLeft:"4px solid #22c55e" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
           <div>
             <div style={{ fontWeight:700, fontSize:16 }}>💰 Esoda</div>
-            <div style={{ fontSize:13, color:"#888", marginTop:2 }}>{monthOrders.length} paraggellies</div>
+            <div style={{ fontSize:13, color:"#888", marginTop:2 }}>{ordersWithoutInvoice.length} paraggellies + {monthInvoices.length} timologia</div>
           </div>
           <div style={{ fontSize:24, fontWeight:700, color:"#22c55e" }}>€{totalRevenue.toFixed(2)}</div>
         </div>
+        {monthInvoices.length>0 && <div style={{ fontSize:12, color:"#64748b", paddingTop:6, borderTop:"1px solid #f0fdf4" }}>Timologia: €{totalFromInvoices.toFixed(2)} | Paraggellies xoris timologio: €{totalFromOrders.toFixed(2)}</div>}
       </div>
 
       {/* Έξοδα υλικών */}
