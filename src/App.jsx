@@ -167,8 +167,8 @@ function Dashboard({ orders, customers, leads, expenses, invoices }) {
           <div style={{ fontSize:11, color:"#888" }}>Exoda</div>
         </div>
         <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #f59e0b", textAlign:"center" }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#f59e0b" }}>€{(totalLaborMe+totalLaborMom).toFixed(0)}</div>
-          <div style={{ fontSize:11, color:"#888" }}>Ergasia</div>
+          <div style={{ fontSize:18, fontWeight:700, color:"#f59e0b" }}>€{totalOrderCosts.toFixed(0)}</div>
+          <div style={{ fontSize:11, color:"#888" }}>Kostos Paraggellion</div>
         </div>
         <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}`, textAlign:"center" }}>
           <div style={{ fontSize:18, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(0)}</div>
