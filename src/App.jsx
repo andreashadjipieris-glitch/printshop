@@ -15,6 +15,21 @@ const SHIRT_PRICES = { white: { normal: 2.45, big: 2.88 }, color: { normal: 2.88
 const EXPENSE_CATEGORIES = ["Ylika DTF", "Faneles", "Autokollita", "Michanima", "Aravio", "Logariasmos", "Allo"];
 const HOURLY_RATE_ME = 6;
 const HOURLY_RATE_MOM = 3.29;
+const SHIPPING_COST = 3;
+const DTF_FILM_COST = 0.52; // per shirt
+const ELECTRICITY_COST = 0.02; // per shirt
+const LABOR_PER_SHIRT = (2/60) * HOURLY_RATE_ME; // 2 min per shirt
+
+function calcOrderCost(order) {
+  if (!order.qty || order.qty === 0) return 0;
+  const shirtPrice = SHIRT_PRICES[order.shirt_type||"color"][order.shirt_size||"normal"];
+  const dtfPress = SIZES_M2[order.dtf_size||"A4"] * DTF_PRICE_PER_M2;
+  const materialPerShirt = shirtPrice + dtfPress + DTF_FILM_COST + ELECTRICITY_COST;
+  const laborPerShirt = LABOR_PER_SHIRT;
+  const shippingCost = order.with_shipping ? SHIPPING_COST : 0;
+  const laborExtra = ((order.hours_me||0) * HOURLY_RATE_ME) + ((order.hours_mom||0) * HOURLY_RATE_MOM);
+  return (materialPerShirt + laborPerShirt) * order.qty + shippingCost + laborExtra;
+}
 
 function getSalePrice(qty) {
   if (qty >= 100) return 6; if (qty >= 30) return 7; if (qty >= 20) return 8; return 10;
@@ -134,9 +149,8 @@ function Dashboard({ orders, customers, leads, expenses, invoices }) {
   const todayLeads = leads.filter(l => l.created_at?.slice(0,10) === new Date().toISOString().slice(0,10)).length;
   const totalSales = orders.reduce((s,o) => s+(o.total||0), 0);
   const totalExpenses = expenses.reduce((s,e) => s+(e.amount||0), 0);
-  const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME), 0);
-  const totalLaborMom = orders.reduce((s,o) => s+((o.hours_mom||0)*HOURLY_RATE_MOM), 0);
-  const totalCost = totalExpenses + totalLaborMe + totalLaborMom;
+  const totalOrderCosts = orders.reduce((s,o) => s+calcOrderCost(o), 0);
+  const totalCost = totalExpenses + totalOrderCosts;
   const profit = totalSales - totalCost;
   return (
     <div>
@@ -285,13 +299,14 @@ function Customers({ customers, orders, invoices, refresh }) {
 }
 
 function Orders({ orders, customers, refresh }) {
-  const [form, setForm] = useState({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0 });
+  const [form, setForm] = useState({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0, qty:0, shirt_type:"color", shirt_size:"normal", dtf_size:"A4", with_shipping:false });
   const [adding, setAdding] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   async function addOrder() {
     if (!form.customer_id) return;
-    await supabase.from("orders").insert([{ ...form, total:parseFloat(form.total)||0, hours_me:parseFloat(form.hours_me)||0, hours_mom:parseFloat(form.hours_mom)||0 }]);
-    setForm({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0 }); setAdding(false); refresh();
+    const orderData = { ...form, total:parseFloat(form.total)||0, hours_me:parseFloat(form.hours_me)||0, hours_mom:parseFloat(form.hours_mom)||0, qty:parseInt(form.qty)||0 };
+    await supabase.from("orders").insert([orderData]);
+    setForm({ customer_id:"", status:"Se anamoni", total:"", notes:"", hours_me:0, hours_mom:0, qty:0, shirt_type:"color", shirt_size:"normal", dtf_size:"A4", with_shipping:false }); setAdding(false); refresh();
   }
   async function updateStatus(id, status) { await supabase.from("orders").update({ status }).eq("id", id); refresh(); }
   async function createInvoiceFromOrder(order) {
@@ -337,32 +352,73 @@ function Orders({ orders, customers, refresh }) {
           {showCalc && <MiniCalculator onSelect={total => { setForm({...form, total:total.toString()}); setShowCalc(false); }} />}
           <input style={styles.input} placeholder="Synolo €" type="number" value={form.total} onChange={e => setForm({...form, total:e.target.value})} />
           <input style={styles.input} placeholder="Simeiosis" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} />
-          <div style={{ display:"flex", gap:8 }}>
-            <div style={{ flex:1 }}>
-              <label style={styles.label}>⏱ Ores Ego:</label>
-              <input style={styles.input} type="number" step="0.5" value={form.hours_me} onChange={e => setForm({...form, hours_me:e.target.value})} />
+          
+          <div style={{ background:"#f8fafc", borderRadius:10, padding:12, marginBottom:10, border:"1px solid #e2e8f0" }}>
+            <div style={{ fontWeight:600, marginBottom:8, fontSize:14 }}>📦 Stoixeia Paraggelias (gia kostos)</div>
+            
+            <label style={styles.label}>Posotita fanellon:</label>
+            <input style={styles.input} type="number" placeholder="0" value={form.qty} onChange={e => setForm({...form, qty:e.target.value})} />
+            
+            <label style={styles.label}>Tipos fanelas:</label>
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              <button onClick={() => setForm({...form, shirt_type:"white"})} style={{ ...styles.btnSmall, ...(form.shirt_type==="white"?{background:"#1e293b",color:"white"}:{}) }}>White/Ash</button>
+              <button onClick={() => setForm({...form, shirt_type:"color"})} style={{ ...styles.btnSmall, ...(form.shirt_type==="color"?{background:"#1e293b",color:"white"}:{}) }}>Color</button>
             </div>
-            <div style={{ flex:1 }}>
-              <label style={styles.label}>⏱ Ores Mitera:</label>
-              <input style={styles.input} type="number" step="0.5" value={form.hours_mom} onChange={e => setForm({...form, hours_mom:e.target.value})} />
+            
+            <label style={styles.label}>Megethos fanelas:</label>
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              <button onClick={() => setForm({...form, shirt_size:"normal"})} style={{ ...styles.btnSmall, ...(form.shirt_size==="normal"?{background:"#1e293b",color:"white"}:{}) }}>Normal</button>
+              <button onClick={() => setForm({...form, shirt_size:"big"})} style={{ ...styles.btnSmall, ...(form.shirt_size==="big"?{background:"#1e293b",color:"white"}:{}) }}>BIG (2XL+)</button>
             </div>
-          </div>
-          <div style={{ background:"#f1f5f9", borderRadius:8, padding:10, fontSize:13, marginBottom:10 }}>
-            💰 Kostos ergasias: €{((parseFloat(form.hours_me)||0)*HOURLY_RATE_ME + (parseFloat(form.hours_mom)||0)*HOURLY_RATE_MOM).toFixed(2)}
-            {" "}| Kerdos: <strong style={{ color:"#22c55e" }}>€{((parseFloat(form.total)||0) - ((parseFloat(form.hours_me)||0)*HOURLY_RATE_ME + (parseFloat(form.hours_mom)||0)*HOURLY_RATE_MOM)).toFixed(2)}</strong>
+            
+            <label style={styles.label}>Megethos DTF:</label>
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              {Object.keys(SIZES_M2).map(s => <button key={s} onClick={() => setForm({...form, dtf_size:s})} style={{ ...styles.btnSmall, ...(form.dtf_size===s?{background:"#1e293b",color:"white"}:{}) }}>{s}</button>)}
+            </div>
+            
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              <button onClick={() => setForm({...form, with_shipping:false})} style={{ ...styles.btnSmall, ...(!form.with_shipping?{background:"#1e293b",color:"white"}:{}) }}>Xoris apostoli</button>
+              <button onClick={() => setForm({...form, with_shipping:true})} style={{ ...styles.btnSmall, ...(form.with_shipping?{background:"#1e293b",color:"white"}:{}) }}>Me apostoli (+€3)</button>
+            </div>
+            
+            <div style={{ display:"flex", gap:8 }}>
+              <div style={{ flex:1 }}>
+                <label style={styles.label}>⏱ Ores Ego:</label>
+                <input style={styles.input} type="number" step="0.5" value={form.hours_me} onChange={e => setForm({...form, hours_me:e.target.value})} />
+              </div>
+              <div style={{ flex:1 }}>
+                <label style={styles.label}>⏱ Ores Mitera:</label>
+                <input style={styles.input} type="number" step="0.5" value={form.hours_mom} onChange={e => setForm({...form, hours_mom:e.target.value})} />
+              </div>
+            </div>
+            
+            {form.qty > 0 && (() => {
+              const estCost = calcOrderCost({...form, qty:parseInt(form.qty)||0, hours_me:parseFloat(form.hours_me)||0, hours_mom:parseFloat(form.hours_mom)||0});
+              const estProfit = (parseFloat(form.total)||0) - estCost;
+              return (
+                <div style={{ background:"white", borderRadius:8, padding:10, fontSize:13 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span>Pragmatiko kostos:</span><span style={{ fontWeight:600, color:"#ef4444" }}>€{estCost.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ fontWeight:700 }}>Katharo kerdos:</span><span style={{ fontWeight:700, color:estProfit>=0?"#22c55e":"#ef4444" }}>€{estProfit.toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <button style={styles.btn} onClick={addOrder}>💾 Save</button>
         </div>
       )}
       {orders.map(o => {
-        const laborCost = ((o.hours_me||0)*HOURLY_RATE_ME) + ((o.hours_mom||0)*HOURLY_RATE_MOM);
-        const orderProfit = (o.total||0) - laborCost;
+        const realCost = calcOrderCost(o);
+        const orderProfit = (o.total||0) - realCost;
         return (
           <div key={o.id} style={styles.row}>
             <div>
               <div style={{ fontWeight:600 }}>{o.customers?.name||"—"}</div>
               <div style={{ fontSize:13, color:"#888" }}>€{o.total} · {o.created_at?.slice(0,10)}</div>
-              {(o.hours_me||o.hours_mom) ? <div style={{ fontSize:12, color:"#64748b" }}>⏱ {o.hours_me||0}h ego + {o.hours_mom||0}h mitera | Kerdos: <span style={{ color:orderProfit>=0?"#22c55e":"#ef4444", fontWeight:600 }}>€{orderProfit.toFixed(2)}</span></div> : null}
+              {o.qty > 0 && <div style={{ fontSize:12, color:"#64748b" }}>👕 {o.qty} {o.shirt_type||"color"} {o.dtf_size||"A4"} | Kostos: €{realCost.toFixed(2)} | <span style={{ color:orderProfit>=0?"#22c55e":"#ef4444", fontWeight:600 }}>Kerdos: €{orderProfit.toFixed(2)}</span></div>}
               {o.notes && <div style={{ fontSize:12, color:"#64748b" }}>{o.notes}</div>}
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -522,10 +578,11 @@ function Expenses({ expenses, orders, invoices, refresh }) {
   }
   const totalExpenses = expenses.reduce((s,e) => s+(e.amount||0), 0);
   const totalSales = orders.reduce((s,o) => s+(o.total||0), 0);
+  const totalOrderCosts = orders.reduce((s,o) => s+calcOrderCost(o), 0);
   const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME), 0);
   const totalLaborMom = orders.reduce((s,o) => s+((o.hours_mom||0)*HOURLY_RATE_MOM), 0);
   const totalLabor = totalLaborMe + totalLaborMom;
-  const totalCost = totalExpenses + totalLabor;
+  const totalCost = totalExpenses + totalOrderCosts;
   const profit = totalSales - totalCost;
   const margin = totalSales > 0 ? ((profit/totalSales)*100).toFixed(1) : 0;
   const byCategory = EXPENSE_CATEGORIES.map(cat => ({ cat, total:expenses.filter(e=>e.category===cat).reduce((s,e)=>s+(e.amount||0),0) })).filter(x=>x.total>0);
@@ -547,8 +604,8 @@ function Expenses({ expenses, orders, invoices, refresh }) {
           <div style={{ fontSize:12, color:"#888" }}>Ylika & Exoda</div>
         </div>
         <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:"4px solid #f59e0b" }}>
-          <div style={{ fontSize:20, fontWeight:700, color:"#f59e0b" }}>€{totalLabor.toFixed(2)}</div>
-          <div style={{ fontSize:12, color:"#888" }}>Ergasia (Ego + Mitera)</div>
+          <div style={{ fontSize:20, fontWeight:700, color:"#f59e0b" }}>€{totalOrderCosts.toFixed(2)}</div>
+          <div style={{ fontSize:12, color:"#888" }}>Kostos Paraggellion</div>
         </div>
         <div style={{ background:"white", borderRadius:12, padding:12, boxShadow:"0 1px 3px rgba(0,0,0,0.1)", borderTop:`4px solid ${profit>=0?"#22c55e":"#ef4444"}` }}>
           <div style={{ fontSize:20, fontWeight:700, color:profit>=0?"#22c55e":"#ef4444" }}>€{profit.toFixed(2)}</div>
@@ -558,14 +615,22 @@ function Expenses({ expenses, orders, invoices, refresh }) {
 
       {/* Ανάλυση εργασίας */}
       <div style={{ background:"white", borderRadius:12, padding:14, marginBottom:16, boxShadow:"0 1px 3px rgba(0,0,0,0.1)" }}>
-        <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>⏱ Analytika Ergasias</div>
+        <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>📊 Analytika Kostous Paraggellion</div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
-          <span>Ego ({orders.reduce((s,o)=>s+(o.hours_me||0),0).toFixed(1)}h × €{HOURLY_RATE_ME}/h):</span>
+          <span>Ylika (faneles + DTF film + press):</span>
+          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; const sc=SHIRT_PRICES[o.shirt_type||"color"][o.shirt_size||"normal"]; const dc=SIZES_M2[o.dtf_size||"A4"]*DTF_PRICE_PER_M2; return s+(sc+dc+DTF_FILM_COST+ELECTRICITY_COST)*o.qty; },0).toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>Ergasia ego ({orders.reduce((s,o)=>s+(o.hours_me||0)+(o.qty?o.qty*(2/60):0),0).toFixed(1)}h × €{HOURLY_RATE_ME}/h):</span>
           <span style={{ fontWeight:600 }}>€{totalLaborMe.toFixed(2)}</span>
         </div>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
-          <span>Mitera ({orders.reduce((s,o)=>s+(o.hours_mom||0),0).toFixed(1)}h × €{HOURLY_RATE_MOM}/h):</span>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>Ergasia mitera ({orders.reduce((s,o)=>s+(o.hours_mom||0),0).toFixed(1)}h × €{HOURLY_RATE_MOM}/h):</span>
           <span style={{ fontWeight:600 }}>€{totalLaborMom.toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13 }}>
+          <span>Metaforika:</span>
+          <span style={{ fontWeight:600 }}>€{orders.filter(o=>o.with_shipping).length * SHIPPING_COST}.00</span>
         </div>
       </div>
 
@@ -653,16 +718,25 @@ function Calculator() {
   const [printSize, setPrintSize] = useState("A4");
   const [shirtType, setShirtType] = useState("color");
   const [isBig, setIsBig] = useState(false);
+  const [withShipping, setWithShipping] = useState(false);
   const [stickerM2, setStickerM2] = useState(1);
   const [withInstall, setWithInstall] = useState(false);
   const [hoursMe, setHoursMe] = useState(0);
   const [hoursMom, setHoursMom] = useState(0);
+
+  // Κόστος υλικών
   const shirtCost = SHIRT_PRICES[shirtType][isBig?"big":"normal"];
   const dtfCost = SIZES_M2[printSize] * DTF_PRICE_PER_M2;
-  const costPerShirt = shirtCost + dtfCost;
-  const totalMaterialCost = costPerShirt * qty;
-  const laborCost = (hoursMe * HOURLY_RATE_ME) + (hoursMom * HOURLY_RATE_MOM);
-  const totalCost = totalMaterialCost + laborCost;
+  const dtfFilmCost = 0.52; // €0.52 ανά φανέλα (A4 εκτύπωση μπρος+πίσω)
+  const electricityCost = 0.02; // αμελητέο αλλά το συμπεριλαμβάνουμε
+  const laborPerShirt = (2/60) * HOURLY_RATE_ME; // 2 λεπτά × €6/ώρα = €0.20
+  const shippingPerShirt = withShipping ? (3/qty) : 0;
+
+  const costPerShirt = shirtCost + dtfCost + dtfFilmCost + electricityCost + laborPerShirt + shippingPerShirt;
+  const totalMaterialCost = (shirtCost + dtfCost + dtfFilmCost + electricityCost) * qty;
+  const totalLaborCost = laborPerShirt * qty + (hoursMe * HOURLY_RATE_ME) + (hoursMom * HOURLY_RATE_MOM);
+  const shippingCost = withShipping ? 3 : 0;
+  const totalCost = totalMaterialCost + totalLaborCost + shippingCost;
   const salePrice = getSalePrice(qty);
   const totalSale = salePrice * qty;
   const profit = totalSale - totalCost;
@@ -695,28 +769,30 @@ function Calculator() {
           </div>
           <label style={styles.label}>Posotita:</label>
           <input style={styles.input} type="number" value={qty} onChange={e => setQty(parseInt(e.target.value)||1)} />
-          <div style={{ display:"flex", gap:8 }}>
-            <div style={{ flex:1 }}>
-              <label style={styles.label}>⏱ Ores Ego:</label>
-              <input style={styles.input} type="number" step="0.5" value={hoursMe} onChange={e => setHoursMe(parseFloat(e.target.value)||0)} />
-            </div>
-            <div style={{ flex:1 }}>
-              <label style={styles.label}>⏱ Ores Mitera:</label>
-              <input style={styles.input} type="number" step="0.5" value={hoursMom} onChange={e => setHoursMom(parseFloat(e.target.value)||0)} />
-            </div>
+          <label style={styles.label}>Apostoli:</label>
+          <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+            <button onClick={() => setWithShipping(false)} style={{ ...styles.btnSmall, ...(!withShipping?{background:"#1e293b",color:"white"}:{}) }}>Xoris (+€0)</button>
+            <button onClick={() => setWithShipping(true)} style={{ ...styles.btnSmall, ...(withShipping?{background:"#1e293b",color:"white"}:{}) }}>Me apostoli (+€3)</button>
           </div>
           <div style={{ background:"#f1f5f9", borderRadius:10, padding:16 }}>
-            <div style={styles.calcRow}><span>Kostos fanelas (me ΦΠΑ):</span><span>€{shirtCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos DTF ({printSize}):</span><span>€{dtfCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos ylikon/tem:</span><span style={{ fontWeight:700 }}>€{costPerShirt.toFixed(2)}</span></div>
+            <div style={{ fontSize:12, color:"#64748b", fontWeight:600, marginBottom:8 }}>📦 KOSTOS ANA FANELA:</div>
+            <div style={styles.calcRow}><span>Fanela (me ΦΠΑ 19%):</span><span>€{shirtCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>DTF press ({printSize}):</span><span>€{dtfCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>DTF film:</span><span>€{dtfFilmCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Revma presas:</span><span>€{electricityCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Ergasia/tem (2 lep × €{HOURLY_RATE_ME}/h):</span><span>€{laborPerShirt.toFixed(2)}</span></div>
+            {withShipping && <div style={styles.calcRow}><span>Metaforiko/tem (€3÷{qty}):</span><span>€{shippingPerShirt.toFixed(2)}</span></div>}
+            <div style={{ ...styles.calcRow, fontWeight:700, borderTop:"1px solid #e2e8f0", paddingTop:6, marginTop:4 }}><span>Pragmatiko kostos/tem:</span><span>€{costPerShirt.toFixed(2)}</span></div>
+            <hr style={{ border:"none", borderTop:"1px solid #e2e8f0", margin:"8px 0" }} />
+            <div style={{ fontSize:12, color:"#64748b", fontWeight:600, marginBottom:8 }}>💰 SYNOLIKA ({qty} tem):</div>
             <div style={styles.calcRow}><span>Synoliko kostos ylikon:</span><span>€{totalMaterialCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Kostos ergasias:</span><span>€{laborCost.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span style={{ fontWeight:700 }}>Synoliko kostos:</span><span style={{ fontWeight:700 }}>€{totalCost.toFixed(2)}</span></div>
+            <div style={styles.calcRow}><span>Synoliko ergasia:</span><span>€{totalLaborCost.toFixed(2)}</span></div>
+            {withShipping && <div style={styles.calcRow}><span>Metaforika:</span><span>€{shippingCost.toFixed(2)}</span></div>}
+            <div style={{ ...styles.calcRow, fontWeight:700 }}><span>Synoliko kostos:</span><span>€{totalCost.toFixed(2)}</span></div>
             <hr style={{ border:"none", borderTop:"1px solid #e2e8f0", margin:"8px 0" }} />
             <div style={styles.calcRow}><span>Timi polisis/tem:</span><span style={{ color:"#3b82f6", fontWeight:700 }}>€{salePrice.toFixed(2)}</span></div>
             <div style={styles.calcRow}><span>Synolo polisis:</span><span style={{ color:"#3b82f6", fontWeight:700 }}>€{totalSale.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Katharo Kerdos:</span><span style={{ color:profit>=0?"#22c55e":"#ef4444", fontWeight:700 }}>€{profit.toFixed(2)}</span></div>
-            <div style={styles.calcRow}><span>Perithorio:</span><span style={{ color:profit>=0?"#22c55e":"#ef4444", fontWeight:700 }}>{margin}%</span></div>
+            <div style={{ ...styles.calcRow, fontSize:16 }}><span style={{ fontWeight:700 }}>🎯 Katharo Kerdos:</span><span style={{ color:profit>=0?"#22c55e":"#ef4444", fontWeight:700 }}>€{profit.toFixed(2)} ({margin}%)</span></div>
           </div>
           <div style={{ marginTop:12, padding:10, background:"#fef9c3", borderRadius:8, fontSize:13 }}>
             💡 {qty>=100?"100+ tem → €6/tem":qty>=30?"30-99 tem → €7/tem":qty>=20?"20-29 tem → €8/tem":"1-19 tem → €10/tem"}
@@ -890,7 +966,8 @@ function MonthlyReport({ orders, expenses, invoices }) {
   const laborMe = totalHoursMe * HOURLY_RATE_ME;
   const laborMom = totalHoursMom * HOURLY_RATE_MOM;
   const totalLabor = laborMe + laborMom;
-  const totalCost = totalMaterials + totalLabor;
+  const totalOrderCosts = monthOrders.reduce((s,o) => s+calcOrderCost(o), 0);
+  const totalCost = totalMaterials + totalOrderCosts;
   const netProfit = totalRevenue - totalCost;
   const remaining = netProfit; // μετά από όλα
 
