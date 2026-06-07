@@ -579,7 +579,7 @@ function Expenses({ expenses, orders, invoices, refresh }) {
   const totalExpenses = expenses.reduce((s,e) => s+(e.amount||0), 0);
   const totalSales = orders.reduce((s,o) => s+(o.total||0), 0);
   const totalOrderCosts = orders.reduce((s,o) => s+calcOrderCost(o), 0);
-  const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME), 0);
+  const totalLaborMe = orders.reduce((s,o) => s+((o.hours_me||0)*HOURLY_RATE_ME) + ((o.qty||0)*(2/60)*HOURLY_RATE_ME), 0);
   const totalLaborMom = orders.reduce((s,o) => s+((o.hours_mom||0)*HOURLY_RATE_MOM), 0);
   const totalLabor = totalLaborMe + totalLaborMom;
   const totalCost = totalExpenses + totalOrderCosts;
