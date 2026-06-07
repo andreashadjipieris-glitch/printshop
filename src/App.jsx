@@ -966,6 +966,8 @@ function MonthlyReport({ orders, expenses, invoices }) {
   const laborMe = totalHoursMe * HOURLY_RATE_ME;
   const laborMom = totalHoursMom * HOURLY_RATE_MOM;
   const totalLabor = laborMe + laborMom;
+  const totalLaborMe = laborMe;
+  const totalLaborMom = laborMom;
   const totalOrderCosts = monthOrders.reduce((s,o) => s+calcOrderCost(o), 0);
   const totalCost = totalMaterials + totalOrderCosts;
   const netProfit = totalRevenue - totalCost;
