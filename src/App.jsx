@@ -617,8 +617,20 @@ function Expenses({ expenses, orders, invoices, refresh }) {
       <div style={{ background:"white", borderRadius:12, padding:14, marginBottom:16, boxShadow:"0 1px 3px rgba(0,0,0,0.1)" }}>
         <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>📊 Analytika Kostous Paraggellion</div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
-          <span>Ylika (faneles + DTF film + press):</span>
-          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; const sc=SHIRT_PRICES[o.shirt_type||"color"][o.shirt_size||"normal"]; const dc=SIZES_M2[o.dtf_size||"A4"]*DTF_PRICE_PER_M2; return s+(sc+dc+DTF_FILM_COST+ELECTRICITY_COST)*o.qty; },0).toFixed(2)}</span>
+          <span>Faneles (me ΦΠΑ 19%):</span>
+          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; return s+SHIRT_PRICES[o.shirt_type||"color"][o.shirt_size||"normal"]*o.qty; },0).toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>DTF Press:</span>
+          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; return s+SIZES_M2[o.dtf_size||"A4"]*DTF_PRICE_PER_M2*o.qty; },0).toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>DTF Film:</span>
+          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; return s+DTF_FILM_COST*o.qty; },0).toFixed(2)}</span>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
+          <span>Revma presas:</span>
+          <span style={{ fontWeight:600 }}>€{orders.reduce((s,o)=>{ if(!o.qty) return s; return s+ELECTRICITY_COST*o.qty; },0).toFixed(2)}</span>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
           <span>Ergasia ego ({orders.reduce((s,o)=>s+(o.hours_me||0)+(o.qty?o.qty*(2/60):0),0).toFixed(1)}h × €{HOURLY_RATE_ME}/h):</span>
