@@ -16,7 +16,7 @@ const EXPENSE_CATEGORIES = ["Ylika DTF", "Faneles", "Autokollita", "Michanima", 
 const HOURLY_RATE_ME = 6;
 const HOURLY_RATE_MOM = 3.29;
 const SHIPPING_COST = 3;
-const DTF_FILM_COST = 0.52; // per shirt
+const DTF_FILM_COST = 0; // removed - using DTF_PRICE_PER_M2 based on size instead (more accurate)
 const ELECTRICITY_COST = 0.02; // per shirt
 const LABOR_PER_SHIRT = (2/60) * HOURLY_RATE_ME; // 2 min per shirt
 
